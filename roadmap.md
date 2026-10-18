@@ -1,0 +1,8 @@
+- [ ] Adapt shared navigation, controls, and tables to smaller screens.
+- [ ] Adapt all overview, detail, and settings pages.
+- [ ] Verify phone, tablet, and desktop layouts and navigation.
+- [x] Admin login, protected routes, logout (demo mock auth)
+- [x] Settings > Administrators tab with Add Admin
+- [x] Working Edit Profile dialog on user details
+- [x] Simplify administrator roles to Admin.
+- [x] Add validated new-user creation and verify view/edit flow.
