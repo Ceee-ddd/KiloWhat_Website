@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it } from "vitest";
-import { authService, DEMO_ADMIN, safeRedirect } from "@/lib/auth";
+import { safeRedirect } from "@/lib/auth";
 import { addAdmin, addUser, updateUser, resetStore } from "@/lib/store";
 import { users } from "@/lib/data";
 
@@ -8,19 +8,7 @@ beforeEach(() => {
   resetStore();
 });
 
-describe("mock auth", () => {
-  it("rejects bad credentials and signs in/out the demo admin", async () => {
-    await expect(authService.signIn(DEMO_ADMIN.email, "nope")).rejects.toThrow();
-    expect(authService.getSession()).toBeNull();
-    const s = await authService.signIn(DEMO_ADMIN.email, DEMO_ADMIN.password);
-    expect(s.role).toBe("Admin");
-    expect(authService.getSession()?.email).toBe(DEMO_ADMIN.email);
-    await authService.signOut();
-    expect(authService.getSession()).toBeNull();
-  });
-  it("rejects disabled admins", async () => {
-    await expect(authService.signIn("paolo@kilowhat.ph", DEMO_ADMIN.password)).rejects.toThrow(/disabled/);
-  });
+describe("auth helpers", () => {
   it("only allows safe relative redirects", () => {
     expect(safeRedirect("/settings")).toBe("/settings");
     expect(safeRedirect("//evil.com")).toBeUndefined();

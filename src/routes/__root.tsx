@@ -77,9 +77,10 @@ function ErrorComponent({ error, reset }: ErrorComponentProps) {
 }
 
 export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()({
-  // Demo session lives in the browser, so this guard runs client-side; AdminLayout also gates rendering (incl. SSR).
-  beforeLoad: ({ location }) => {
-    if (typeof window === "undefined" || location.pathname.startsWith("/login")) return;
+  // The session lives in the browser, so this guard runs client-side; AdminLayout also gates rendering (incl. SSR).
+  beforeLoad: async ({ location }) => {
+    if (typeof window === "undefined" || location.pathname.startsWith("/login") || location.pathname.startsWith("/activate")) return;
+    await authService.init(); // read the stored session first, so a page refresh does not bounce through /login
     if (!authService.getSession()) throw redirect({ to: "/login", search: { redirect: location.href } });
   },
   head: () => ({
@@ -124,6 +125,12 @@ function RootShell({ children }: { children: ReactNode }) {
 
 function RootComponent() {
   const { queryClient } = Route.useRouteContext();
+
+  // After a full page load the server-rendered route is reused, so beforeLoad does not run.
+  // Read the stored session here too, otherwise the page waits forever (white screen).
+  useEffect(() => {
+    void authService.init();
+  }, []);
 
   return (
     <QueryClientProvider client={queryClient}>
