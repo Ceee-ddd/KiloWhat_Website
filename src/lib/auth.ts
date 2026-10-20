@@ -1,89 +1,208 @@
 /**
- * DEMO-ONLY mock authentication. Not secure: credentials are checked in the browser
- * against in-memory demo records and the "session" is a plain localStorage entry.
+ * Real authentication (Supabase Auth + new-device email check).
  *
- * Everything the UI needs goes through `authService` (AuthService). To move to Lovable
- * Cloud / Supabase Auth later, implement the same interface with the provider's calls
- * and swap the export — the login page, route gate and logout button stay unchanged.
+ * Sign-in is two gates, same as the mobile app:
+ *   1. email + password  (supabase.auth.signInWithPassword)
+ *   2. device check      (register_session RPC; a browser the account has never used
+ *                         must pass a 6-digit email code from the `device-otp` function)
+ * Only a session that passed BOTH gates and belongs to an admin is exposed as `Session`.
+ * Until then the UI sees `null`, and the database refuses to return any data
+ * (is_admin() needs a verified session).
+ *
+ * Public surface used by the rest of the app: authService, useSession, usePhase,
+ * safeRedirect, AuthError, Session.
  */
 import { useSyncExternalStore } from "react";
+import { FunctionsHttpError } from "@supabase/supabase-js";
 import type { AdminRole } from "./data";
-import { findAdminByEmail } from "./store";
+import { supabase } from "./supabase";
 
 export type Session = { adminId: string; name: string; email: string; role: AdminRole };
+export type Phase = "loading" | "signedOut" | "otp" | "signedIn";
+export type SignInResult = "verified" | "otp_required";
 
-export interface AuthService {
-  signIn(email: string, password: string): Promise<Session>;
-  signOut(): Promise<void>;
-  getSession(): Session | null;
-  subscribe(listener: () => void): () => void;
+export class AuthError extends Error {
+  constructor(message: string, public code?: string) {
+    super(message);
+  }
 }
 
-export const DEMO_ADMIN = { email: "admin@kilowhat.ph", password: "demo1234" } as const;
-const KEY = "kilowhat.demo.session";
+// ------------------------------------------------------------------ device identity
+const DEVICE_KEY = "kilowhat_device_id";
+let memoryDeviceId: string | null = null;
 
-export class AuthError extends Error {}
+function randomHex(bytes: number): string {
+  const buf = new Uint8Array(bytes);
+  crypto.getRandomValues(buf);
+  return Array.from(buf, (b) => b.toString(16).padStart(2, "0")).join("");
+}
 
-const listeners = new Set<() => void>();
-const notify = () => listeners.forEach((l) => l());
-
-let cachedRaw: string | null | undefined;
-let cached: Session | null = null;
-
-function read(): Session | null {
-  if (typeof window === "undefined") return null;
-  let raw: string | null = null;
+/** 64-hex random secret per browser. Only its SHA-256 is stored on the server. */
+function deviceId(): string {
   try {
-    raw = window.localStorage.getItem(KEY);
+    const saved = window.localStorage.getItem(DEVICE_KEY);
+    if (saved && saved.length >= 32 && saved.length <= 128) return saved;
+    const fresh = randomHex(32);
+    window.localStorage.setItem(DEVICE_KEY, fresh);
+    return fresh;
   } catch {
-    return null;
+    // Storage blocked: fall back to this tab only (an OTP will be asked each visit).
+    return (memoryDeviceId ??= randomHex(32));
   }
-  if (raw === cachedRaw) return cached;
-  cachedRaw = raw;
-  cached = null;
-  if (raw) {
-    try {
-      const p = JSON.parse(raw);
-      if (p && typeof p.adminId === "string" && typeof p.email === "string" && typeof p.name === "string" && typeof p.role === "string") cached = { adminId: p.adminId, email: p.email, name: p.name, role: "Admin" };
-    } catch {
-      /* ignore corrupt session */
-    }
-  }
-  return cached;
 }
 
-export const mockAuthService: AuthService = {
-  async signIn(email, password) {
-    await new Promise((r) => setTimeout(r, 350));
-    const admin = findAdminByEmail(email);
-    if (!admin || password !== DEMO_ADMIN.password) throw new AuthError("Invalid email or password.");
-    if (admin.status !== "Active") throw new AuthError("This administrator account is disabled.");
-    const session: Session = { adminId: admin.id, name: admin.name, email: admin.email, role: admin.role };
-    window.localStorage.setItem(KEY, JSON.stringify(session));
-    notify();
-    return session;
+function deviceName(): string {
+  const ua = typeof navigator === "undefined" ? "" : navigator.userAgent;
+  const browser = /Edg\//.test(ua) ? "Edge" : /OPR\//.test(ua) ? "Opera" : /Firefox\//.test(ua) ? "Firefox" : /Chrome\//.test(ua) ? "Chrome" : /Safari\//.test(ua) ? "Safari" : "Browser";
+  const os = /Windows/.test(ua) ? "Windows" : /Android/.test(ua) ? "Android" : /iPhone|iPad/.test(ua) ? "iOS" : /Mac OS X/.test(ua) ? "macOS" : /Linux/.test(ua) ? "Linux" : "Unknown OS";
+  return `${browser} on ${os} (web admin)`;
+}
+
+const deviceBody = () => ({ device_id: deviceId(), device_name: deviceName(), platform: "web" });
+
+// ------------------------------------------------------------------ state store
+type State = { phase: Phase; session: Session | null };
+let state: State = { phase: "loading", session: null };
+const listeners = new Set<() => void>();
+
+function setState(next: State) {
+  state = next;
+  listeners.forEach((l) => l());
+}
+const signedOut = (): State => ({ phase: "signedOut", session: null });
+
+// ------------------------------------------------------------------ core flow
+/** Looks at the stored Supabase session and works out what the UI may show. */
+async function establish(): Promise<SignInResult | "none"> {
+  const { data: sessionData } = await supabase.auth.getSession();
+  const authSession = sessionData.session;
+  if (!authSession) {
+    setState(signedOut());
+    return "none";
+  }
+
+  const { data: reg, error: regError } = await supabase.rpc("register_session", {
+    p_device_id: deviceId(),
+    p_device_name: deviceName(),
+    p_platform: "web",
+  });
+  if (regError) {
+    await supabase.auth.signOut();
+    setState(signedOut());
+    throw new AuthError("Could not verify this device. Please sign in again.");
+  }
+
+  if ((reg as { status?: string } | null)?.status === "otp_required") {
+    setState({ phase: "otp", session: null });
+    return "otp_required";
+  }
+
+  // Verified device -> must also be an administrator.
+  const uid = authSession.user.id;
+  const { data: roleRow } = await supabase.from("user_roles").select("role").eq("user_id", uid).eq("role", "admin").maybeSingle();
+  if (!roleRow) {
+    await supabase.auth.signOut();
+    setState(signedOut());
+    throw new AuthError("This account does not have administrator access.", "not_admin");
+  }
+  const { data: profile } = await supabase.from("profiles").select("full_name").eq("id", uid).maybeSingle();
+
+  setState({
+    phase: "signedIn",
+    session: {
+      adminId: uid,
+      name: profile?.full_name ?? authSession.user.email ?? "Administrator",
+      email: authSession.user.email ?? "",
+      role: "Admin",
+    },
+  });
+  return "verified";
+}
+
+async function callDeviceOtp<T>(body: Record<string, unknown>): Promise<T> {
+  const { data, error } = await supabase.functions.invoke("device-otp", { body: { ...deviceBody(), ...body } });
+  if (error) {
+    if (error instanceof FunctionsHttpError) {
+      const b = await error.context.json().catch(() => null);
+      throw new AuthError(b?.message ?? "Something went wrong. Please try again.", b?.code);
+    }
+    throw new AuthError("Could not reach the server. Check your connection.");
+  }
+  return data as T;
+}
+
+let initPromise: Promise<void> | null = null;
+
+export const authService = {
+  /** Reads the stored session once (call before trusting getSession). Safe to call many times. */
+  init(): Promise<void> {
+    if (typeof window === "undefined") return Promise.resolve();
+    initPromise ??= (async () => {
+      supabase.auth.onAuthStateChange((event) => {
+        // Only react to sign-out here (expiry, other tab). Sign-in is handled by signIn()/establish().
+        if (event === "SIGNED_OUT") setState(signedOut());
+      });
+      try {
+        await establish();
+      } catch {
+        /* establish already moved the state to signedOut */
+      }
+    })();
+    return initPromise;
   },
-  async signOut() {
-    window.localStorage.removeItem(KEY);
-    notify();
+
+  /** Step 1. Returns "verified" (signed in) or "otp_required" (code must be entered). */
+  async signIn(email: string, password: string): Promise<SignInResult> {
+    const { error } = await supabase.auth.signInWithPassword({ email: email.trim().toLowerCase(), password });
+    if (error) {
+      if (error.status === 429) throw new AuthError("Too many attempts. Please wait a few minutes and try again.", "rate_limited");
+      throw new AuthError("Invalid email or password.", "invalid_credentials");
+    }
+    const result = await establish();
+    if (result === "none") throw new AuthError("Could not sign in. Please try again.");
+    return result;
   },
-  getSession: read,
-  subscribe(listener) {
+
+  /** Step 2a. Emails a 6-digit code (the server limits how often). */
+  sendOtp(): Promise<{ ok: true; already_sent?: boolean; resend_in?: number }> {
+    return callDeviceOtp({ action: "send" });
+  },
+
+  /** Step 2b. Checks the code; on success this browser becomes trusted and we finish signing in. */
+  async verifyOtp(code: string): Promise<void> {
+    await callDeviceOtp({ action: "verify", code });
+    const result = await establish();
+    if (result !== "verified") throw new AuthError("Could not finish signing in. Please sign in again.");
+  },
+
+  async signOut(): Promise<void> {
+    await supabase.auth.signOut();
+    setState(signedOut());
+  },
+
+  getSession(): Session | null {
+    return state.session;
+  },
+  getPhase(): Phase {
+    return state.phase;
+  },
+  subscribe(listener: () => void): () => void {
     listeners.add(listener);
-    const onStorage = (e: StorageEvent) => e.key === KEY && listener();
-    if (typeof window !== "undefined") window.addEventListener("storage", onStorage);
-    return () => {
-      listeners.delete(listener);
-      if (typeof window !== "undefined") window.removeEventListener("storage", onStorage);
-    };
+    return () => listeners.delete(listener);
   },
 };
 
-export const authService: AuthService = mockAuthService;
-
-/** `undefined` while the browser session has not been read yet (server render / hydration), `null` when signed out. */
+/** `undefined` until the stored session has been read (and on the server), `null` when signed out. */
 export function useSession(): Session | null | undefined {
-  return useSyncExternalStore(authService.subscribe, authService.getSession, () => undefined);
+  return useSyncExternalStore(
+    authService.subscribe,
+    () => (state.phase === "loading" ? undefined : state.session),
+    () => undefined,
+  );
+}
+
+export function usePhase(): Phase {
+  return useSyncExternalStore(authService.subscribe, authService.getPhase, () => "loading" as Phase);
 }
 
 /** Only allow same-site relative paths as post-login destinations. */
