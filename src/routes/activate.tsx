@@ -78,8 +78,7 @@ function ActivatePage() {
     <div className="flex min-h-screen items-center justify-center bg-background px-4 py-10">
       <div className="w-full max-w-[420px]">
         <div className="mb-6 flex flex-col items-center gap-2 text-center">
-          <img src="/KiloWhatLogo.png" alt="KiloWhat" className="h-28 w-28 object-contain" />
-          <p className="text-xs font-semibold uppercase text-subtle">Admin Panel</p>
+          <img src="/KiloWhatLogo.png" alt="KiloWhat" className="h-54 w-54 object-contain" />
         </div>
         <Card className="p-6">
           <h1 className="text-lg font-bold text-ink">Activate your account</h1>
