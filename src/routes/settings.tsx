@@ -4,8 +4,11 @@ import { toast } from "sonner";
 import { AdminLayout } from "@/components/AdminLayout";
 import { Card, Badge, Tabs, Toggle, type Tone } from "@/components/kit";
 import { AddAdminDialog } from "@/components/AddAdminDialog";
+import { AdminActivityLog } from "@/components/AdminActivityLog";
 import { useSession } from "@/lib/auth";
-import { useStore } from "@/lib/store";
+import { useQuery } from "@tanstack/react-query";
+import { listAdmins } from "@/lib/admins";
+import { AdminDetailsDialog } from "@/components/AdminDetailsDialog";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
@@ -23,7 +26,7 @@ export const Route = createFileRoute("/settings")({
   component: SettingsPage,
 });
 
-type T = "platform" | "anomaly" | "submeters" | "alerts" | "admins";
+type T = "platform" | "anomaly" | "submeters" | "alerts" | "admins" | "activity";
 
 const Label = ({ children, hint }: { children: ReactNode; hint?: string }) => (
   <p className="mb-2 text-xs font-semibold text-ink">{children} {hint && <span className="font-medium text-subtle opacity-70">{hint}</span>}</p>
@@ -55,20 +58,12 @@ function SettingsPage() {
   const [tab, setTab] = useState<T>("platform");
   const [interval, setInterval] = useState("5 min");
   const [addOpen, setAddOpen] = useState(false);
+  const [selectedId, setSelectedId] = useState<string | null>(null);
   const session = useSession();
-  const admins = useStore((s) => s.admins);
-  const footer = (
-    <div className="fixed bottom-0 left-0 right-0 z-30 flex flex-col items-stretch justify-between gap-2 border-t border-border bg-card px-4 py-3 sm:flex-row sm:items-center sm:px-6 lg:left-60 xl:px-8">
-      <p className="text-sm text-subtle">You have unsaved changes. These apply system-wide once saved.</p>
-      <div className="flex shrink-0 justify-end gap-2">
-        <Button variant="outline" onClick={() => toast("Changes discarded")}>Cancel</Button>
-        <Button onClick={() => toast.success("Settings saved")}>Save Changes</Button>
-      </div>
-    </div>
-  );
+  const admins = useQuery({ queryKey: ["admins"], queryFn: listAdmins, enabled: tab === "admins" });
   return (
-    <AdminLayout title="Settings" footer={footer}>
-      <Tabs<T> value={tab} onChange={setTab} items={[{ value: "platform", label: "Platform" }, { value: "anomaly", label: "Anomaly detection" }, { value: "submeters", label: "Submeters" }, { value: "alerts", label: "Alerts & logs" }, { value: "admins", label: "Administrators" }]} />
+    <AdminLayout title="Settings">
+      <Tabs<T> value={tab} onChange={setTab} items={[{ value: "platform", label: "Platform" }, { value: "anomaly", label: "Anomaly detection" }, { value: "submeters", label: "Submeters" }, { value: "alerts", label: "Alerts & logs" }, { value: "admins", label: "Administrators" }, { value: "activity", label: "Admin activity" }]} />
       <div className="mt-6 sm:mt-12">
         {tab === "platform" && (
           <div className="grid grid-cols-1 gap-5 xl:grid-cols-2 xl:gap-7">
@@ -167,27 +162,41 @@ function SettingsPage() {
             title="Administrators"
             extra={<Button onClick={() => setAddOpen(true)}>Add Admin</Button>}
           >
-            <p className="-mt-3 mb-4 rounded-lg bg-warn-soft px-3 py-2 text-[11px] text-warn">Demo records — stored in this browser only. Once real authentication is connected, admins will be invited through the auth provider.</p>
-            <div className="max-w-full overflow-x-auto" role="region" aria-label="Scrollable data table" tabIndex={0}>
-              <table className="w-full min-w-[640px] text-sm">
-                <thead><tr className="border-b border-border text-left text-xs font-semibold uppercase text-subtle"><th className="py-3 pr-4">Name</th><th className="py-3 pr-4">Email</th><th className="py-3 pr-4">Role</th><th className="py-3 pr-4">Status</th><th className="py-3">Added</th></tr></thead>
-                <tbody>
-                  {admins.map((a) => (
-                    <tr key={a.id} className="border-b border-border last:border-0">
-                      <td className="py-3 pr-4 font-semibold text-ink">{a.name}{session?.adminId === a.id && <span className="ml-2 text-[10px] font-medium text-subtle">(you)</span>}</td>
-                      <td className="py-3 pr-4 text-ink">{a.email}</td>
-                      <td className="py-3 pr-4"><Badge tone="info">{a.role}</Badge></td>
-                      <td className="py-3 pr-4"><Badge tone={a.status === "Active" ? "brand" : "danger"}>{a.status}</Badge></td>
-                      <td className="py-3 text-subtle">{a.added}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+            {admins.isError ? (
+              <p role="alert" className="rounded-lg bg-danger-soft px-3 py-2 text-xs font-medium text-danger">
+                Could not load administrators. <button type="button" className="underline" onClick={() => admins.refetch()}>Try again</button>
+              </p>
+            ) : (
+              <div className="max-w-full overflow-x-auto" role="region" aria-label="Scrollable data table" tabIndex={0}>
+                <table className="w-full min-w-[640px] text-sm">
+                  <thead><tr className="border-b border-border text-left text-xs font-semibold uppercase text-subtle"><th className="py-3 pr-4">Name</th><th className="py-3 pr-4">Email</th><th className="py-3 pr-4">Role</th><th className="py-3 pr-4">Status</th><th className="py-3 pr-4">Invited by</th><th className="py-3">Added</th></tr></thead>
+                  <tbody>
+                    {admins.isLoading && <tr><td colSpan={6} className="py-6 text-center text-xs text-subtle">Loading…</td></tr>}
+                    {admins.data?.map((a) => (
+                      <tr key={a.id} onClick={() => setSelectedId(a.id)} className="cursor-pointer border-b border-border last:border-0 hover:bg-muted/50">
+                        <td className="py-3 pr-4 font-semibold text-ink"><button type="button" onClick={() => setSelectedId(a.id)} className="text-left font-semibold hover:underline">{a.name}</button>{session?.adminId === a.id && <span className="ml-2 text-[10px] font-medium text-subtle">(you)</span>}</td>
+                        <td className="py-3 pr-4 text-ink">{a.email}</td>
+                        <td className="py-3 pr-4"><Badge tone="info">Admin</Badge></td>
+                        <td className="py-3 pr-4"><Badge tone={a.status === "Active" ? "brand" : a.status === "Pending" ? "warn" : "danger"}>{a.status}</Badge></td>
+                        <td className="py-3 pr-4 text-subtle">{a.invited_by ?? "—"}</td>
+                        <td className="py-3 text-subtle">{new Date(a.added).toLocaleDateString(undefined, { dateStyle: "medium" })}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
           </Section>
         )}
+        {tab === "activity" && <AdminActivityLog />}
       </div>
       <AddAdminDialog open={addOpen} onOpenChange={setAddOpen} />
+      <AdminDetailsDialog
+        key={selectedId ?? "none"}
+        admin={admins.data?.find((a) => a.id === selectedId) ?? null}
+        isSelf={!!selectedId && session?.adminId === selectedId}
+        onClose={() => setSelectedId(null)}
+      />
     </AdminLayout>
   );
 }

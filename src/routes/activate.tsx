@@ -2,6 +2,7 @@ import { createFileRoute, useRouter } from "@tanstack/react-router";
 import { useCallback, useEffect, useRef, useState, type FormEvent } from "react";
 import { Zap } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { PasswordInput } from "@/components/PasswordInput";
 import { Card } from "@/components/kit";
 import { activateInvite, checkInvite, InviteError } from "@/lib/admins";
 import { adminPasswordProblem, ADMIN_PASSWORD_MIN, formatInviteCode, normalizeInviteCode } from "@/lib/validation";
@@ -105,12 +106,12 @@ function ActivatePage() {
               </div>
               <div>
                 <label htmlFor="pw" className="text-xs font-semibold text-ink">New password</label>
-                <input id="pw" type="password" autoComplete="new-password" value={password} onChange={(e) => setPassword(e.target.value)} className={field} />
+                <PasswordInput id="pw" autoComplete="new-password" value={password} onChange={(e) => setPassword(e.target.value)} className={field} />
                 <p className="mt-1 text-[11px] text-subtle">{ADMIN_PASSWORD_MIN}+ characters with upper and lower case, a number and a special character.</p>
               </div>
               <div>
                 <label htmlFor="pw2" className="text-xs font-semibold text-ink">Confirm password</label>
-                <input id="pw2" type="password" autoComplete="new-password" value={confirm} onChange={(e) => setConfirm(e.target.value)} className={field} />
+                <PasswordInput id="pw2" autoComplete="new-password" value={confirm} onChange={(e) => setConfirm(e.target.value)} className={field} />
               </div>
               {error && <p role="alert" className={alertBox}>{error}</p>}
               <Button type="submit" disabled={busy} className="h-10">{busy ? "Activating…" : "Activate account"}</Button>

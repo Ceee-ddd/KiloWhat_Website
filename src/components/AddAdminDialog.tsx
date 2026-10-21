@@ -1,4 +1,5 @@
 import { useState, type FormEvent } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { Check, Copy } from "lucide-react";
 import { adminSchema, fieldErrors, formatInviteCode, type FieldErrors } from "@/lib/validation";
@@ -91,6 +92,7 @@ function CodeView({ result, onDone }: { result: InviteResult; onDone: () => void
 
 export function AddAdminDialog({ open, onOpenChange }: { open: boolean; onOpenChange: (o: boolean) => void }) {
   const [issued, setIssued] = useState<InviteResult | null>(null);
+  const queryClient = useQueryClient();
 
   function finish() {
     setIssued(null); // drops the code from memory
@@ -113,7 +115,7 @@ export function AddAdminDialog({ open, onOpenChange }: { open: boolean; onOpenCh
             {issued ? "Share the invite code with the new administrator." : "Send an invitation to create an Admin account."}
           </DialogDescription>
         </div>
-        {issued ? <CodeView result={issued} onDone={finish} /> : <Form onClose={finish} onSent={setIssued} />}
+        {issued ? <CodeView result={issued} onDone={finish} /> : <Form onClose={finish} onSent={(r) => { setIssued(r); queryClient.invalidateQueries({ queryKey: ["admins"] }); }} />}
       </DialogContent>
     </Dialog>
   );
