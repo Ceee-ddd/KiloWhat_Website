@@ -1,6 +1,6 @@
 import { Link, useLocation, useRouter } from "@tanstack/react-router";
 import { useQueryClient } from "@tanstack/react-query";
-import { LayoutPanelLeft, Users, Activity, TriangleAlert, Settings, Search, Zap, Menu, LogOut } from "lucide-react";
+import { LayoutPanelLeft, Users, Activity, TriangleAlert, Settings, Search, Menu, LogOut } from "lucide-react";
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { Button } from "@/components/ui/button";
 import { authService, useSession } from "@/lib/auth";
@@ -39,12 +39,8 @@ export function AdminLayout({ title, children, footer }: { title: string; childr
   }
   const navigation = (
     <>
-      <div className="flex flex-col gap-1">
-        <div className="flex items-center gap-2">
-          <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-brand"><Zap className="h-4 w-4 text-primary-foreground" strokeWidth={2.5} /></div>
-          <p className="text-xl font-extrabold text-brand">KiloWhat</p>
-        </div>
-        <p className="text-xs font-semibold uppercase text-subtle">Admin Panel</p>
+      <div className="flex flex-col items-center gap-2 border-b border-border pb-6">
+        <img src="/KiloWhatLogo.png" alt="KiloWhat" className="h-28 w-28 object-contain" />
       </div>
       <nav aria-label="Main navigation" className="mt-8 flex flex-col gap-1.5">
         {nav.map((n) => (

@@ -15,7 +15,13 @@
 
 import { createClient, type SupabaseClient } from 'npm:@supabase/supabase-js@2';
 
-const WEB_URL = (Deno.env.get('WEB_URL') ?? '').replace(/\/+$/, '');
+// WEB_URL = one origin, or a comma-separated allowlist (first = primary), e.g.
+//   https://kilowhat-admin.vercel.app,http://localhost:8080
+const ALLOWED_ORIGINS = (Deno.env.get('WEB_URL') ?? '')
+  .split(',')
+  .map((o) => o.trim().replace(/\/+$/, ''))
+  .filter(Boolean);
+const WEB_URL = ALLOWED_ORIGINS[0] ?? '';
 const TTL_MIN = Math.max(1, Number(Deno.env.get('INVITE_TTL_MINUTES') ?? '15') || 15);
 
 // Rate limits (key, limit, window seconds)
@@ -27,7 +33,7 @@ const LIMIT_GLOBAL = { limit: 20, windowSec: 86_400 };
 const CODE_ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
 const CODE_LENGTH = 8;
 
-const cors = {
+const cors: Record<string, string> = {
   'Access-Control-Allow-Origin': WEB_URL || 'null',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
   'Vary': 'Origin',
@@ -155,6 +161,9 @@ async function sendInviteEmail(opts: { to: string; name: string; inviter: string
 // ---- handler --------------------------------------------------------------------------------
 
 Deno.serve(async (req) => {
+  // Reflect the caller's origin only if it is on the allowlist; otherwise fall back to the primary.
+  const reqOrigin = req.headers.get('origin') ?? '';
+  cors['Access-Control-Allow-Origin'] = ALLOWED_ORIGINS.includes(reqOrigin) ? reqOrigin : WEB_URL || 'null';
   if (req.method === 'OPTIONS') return new Response('ok', { headers: cors });
   if (req.method !== 'POST') return fail(405, 'method_not_allowed', 'Method not allowed.');
   if (!WEB_URL) return fail(500, 'server_error', 'WEB_URL is not configured.');
@@ -286,7 +295,7 @@ Deno.serve(async (req) => {
         to: email,
         name,
         inviter: String(caller.user_metadata?.full_name ?? 'An administrator'),
-        link: `${WEB_URL}/activate#token=${rawToken}`,
+        link: `${cors['Access-Control-Allow-Origin']}/activate#token=${rawToken}`,
       });
     } catch {
       await admin.auth.admin.deleteUser(userId); // roll back: no orphan account

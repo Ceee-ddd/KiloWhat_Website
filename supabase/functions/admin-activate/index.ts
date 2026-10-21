@@ -13,12 +13,18 @@
 
 import { createClient, type SupabaseClient } from 'npm:@supabase/supabase-js@2';
 
-const WEB_URL = (Deno.env.get('WEB_URL') ?? '').replace(/\/+$/, '');
+// WEB_URL = one origin, or a comma-separated allowlist (first = primary), e.g.
+//   https://kilowhat-admin.vercel.app,http://localhost:8080
+const ALLOWED_ORIGINS = (Deno.env.get('WEB_URL') ?? '')
+  .split(',')
+  .map((o) => o.trim().replace(/\/+$/, ''))
+  .filter(Boolean);
+const WEB_URL = ALLOWED_ORIGINS[0] ?? '';
 const MAX_CODE_ATTEMPTS = 5;
 const IP_LIMIT = { limit: 10, windowSec: 60 };
 const ADMIN_PASSWORD_MIN = 12;
 
-const cors = {
+const cors: Record<string, string> = {
   'Access-Control-Allow-Origin': WEB_URL || 'null',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
   'Vary': 'Origin',
@@ -115,6 +121,9 @@ async function allow(admin: Admin, key: string, cfg: { limit: number; windowSec:
 }
 
 Deno.serve(async (req) => {
+  // Reflect the caller's origin only if it is on the allowlist; otherwise fall back to the primary.
+  const reqOrigin = req.headers.get('origin') ?? '';
+  cors['Access-Control-Allow-Origin'] = ALLOWED_ORIGINS.includes(reqOrigin) ? reqOrigin : WEB_URL || 'null';
   if (req.method === 'OPTIONS') return new Response('ok', { headers: cors });
   if (req.method !== 'POST') return fail(405, 'method_not_allowed', 'Method not allowed.');
 
