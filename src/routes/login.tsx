@@ -2,6 +2,7 @@ import { createFileRoute, useRouter } from "@tanstack/react-router";
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import { Zap } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { PasswordInput } from "@/components/PasswordInput";
 import { Card } from "@/components/kit";
 import { authService, AuthError, safeRedirect, usePhase, useSession } from "@/lib/auth";
 
@@ -128,7 +129,7 @@ function LoginPage() {
                 </div>
                 <div>
                   <label htmlFor="password" className="text-xs font-semibold text-ink">Password</label>
-                  <input id="password" type="password" autoComplete="current-password" value={password} onChange={(e) => setPassword(e.target.value)} className={field} />
+                  <PasswordInput id="password" autoComplete="current-password" value={password} onChange={(e) => setPassword(e.target.value)} className={field} />
                 </div>
                 {error && <p role="alert" className="rounded-lg bg-danger-soft px-3 py-2 text-xs font-medium text-danger">{error}</p>}
                 <Button type="submit" disabled={busy} className="h-10">{busy ? "Signing in…" : "Sign in"}</Button>

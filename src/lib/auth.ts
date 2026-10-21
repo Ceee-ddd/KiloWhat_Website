@@ -71,6 +71,15 @@ function setState(next: State) {
 }
 const signedOut = (): State => ({ phase: "signedOut", session: null });
 
+/** Writes a login/logout row to the admin audit log. Never blocks or breaks sign-in/out. */
+async function logSession(action: "login" | "logout"): Promise<void> {
+  try {
+    await supabase.rpc("log_session_event", { p_action: action });
+  } catch {
+    /* auditing is best-effort here */
+  }
+}
+
 // ------------------------------------------------------------------ core flow
 /** Looks at the stored Supabase session and works out what the UI may show. */
 async function establish(): Promise<SignInResult | "none"> {
@@ -160,6 +169,7 @@ export const authService = {
     }
     const result = await establish();
     if (result === "none") throw new AuthError("Could not sign in. Please try again.");
+    if (result === "verified") await logSession("login");
     return result;
   },
 
@@ -173,11 +183,18 @@ export const authService = {
     await callDeviceOtp({ action: "verify", code });
     const result = await establish();
     if (result !== "verified") throw new AuthError("Could not finish signing in. Please sign in again.");
+    await logSession("login");
   },
 
   async signOut(): Promise<void> {
+    if (state.phase === "signedIn") await logSession("logout"); // needs the session, so before signOut
     await supabase.auth.signOut();
     setState(signedOut());
+  },
+
+  /** After the admin renames themselves, keep the header in sync without a reload. */
+  updateSessionName(name: string): void {
+    if (state.session) setState({ ...state, session: { ...state.session, name } });
   },
 
   getSession(): Session | null {
