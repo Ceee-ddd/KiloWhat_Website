@@ -1,6 +1,5 @@
 import { createFileRoute, useRouter } from "@tanstack/react-router";
 import { useCallback, useEffect, useRef, useState, type FormEvent } from "react";
-import { Zap } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { PasswordInput } from "@/components/PasswordInput";
 import { Card } from "@/components/kit";
@@ -79,8 +78,7 @@ function ActivatePage() {
     <div className="flex min-h-screen items-center justify-center bg-background px-4 py-10">
       <div className="w-full max-w-[420px]">
         <div className="mb-6 flex flex-col items-center gap-2 text-center">
-          <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-brand"><Zap className="h-6 w-6 text-primary-foreground" strokeWidth={2.5} /></div>
-          <p className="text-2xl font-extrabold text-brand">KiloWhat</p>
+          <img src="/KiloWhatLogo.png" alt="KiloWhat" className="h-28 w-28 object-contain" />
           <p className="text-xs font-semibold uppercase text-subtle">Admin Panel</p>
         </div>
         <Card className="p-6">
