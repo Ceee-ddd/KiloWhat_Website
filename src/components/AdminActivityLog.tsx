@@ -130,4 +130,4 @@ export function AdminActivityLog() {
       </div>
     </Card>
   );
-}
+} 
