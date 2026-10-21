@@ -1,0 +1,10 @@
+<!-- Supabase Dashboard -> Authentication -> Email Templates -> "Confirm sign up"
+     Subject: Your KiloWhat verification code
+     IMPORTANT: use {{ .Token }} (the 6-digit code), not {{ .ConfirmationURL }}. -->
+<div style="font-family:Arial,Helvetica,sans-serif;max-width:480px;margin:auto;padding:24px;color:#222">
+  <h2 style="color:#2E7D32;margin:0 0 16px">KiloWhat</h2>
+  <p>Welcome! Enter this code in the app to verify your email address:</p>
+  <p style="font-size:32px;letter-spacing:8px;font-weight:bold;margin:24px 0">{{ .Token }}</p>
+  <p>This code expires soon. If you didn't create a KiloWhat account, you can ignore this email.</p>
+  <p style="color:#888;font-size:12px">KiloWhat · Power Submetering &amp; Budget Management</p>
+</div>

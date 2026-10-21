@@ -28,3 +28,30 @@ export function fieldErrors(err: ZodError): FieldErrors {
   }
   return out as FieldErrors;
 }
+
+// ---- Admin invite activation (must match supabase/functions/admin-activate) ----
+export const ADMIN_PASSWORD_MIN = 12;
+export const INVITE_CODE_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+
+/** Admin password rules: 12+ chars, upper, lower, digit, special, max 72. Server enforces them again. */
+export function adminPasswordProblem(p: string): string | null {
+  if (p.length < ADMIN_PASSWORD_MIN) return `Use at least ${ADMIN_PASSWORD_MIN} characters.`;
+  if (p.length > 72) return "Use 72 characters or fewer.";
+  if (!/[a-z]/.test(p)) return "Add a lowercase letter.";
+  if (!/[A-Z]/.test(p)) return "Add an uppercase letter.";
+  if (!/[0-9]/.test(p)) return "Add a number.";
+  if (!/[^A-Za-z0-9]/.test(p)) return "Add a special character.";
+  return null;
+}
+
+/** "abcd-efgh" / " ABCD EFGH " -> "ABCDEFGH", or null if it is not a valid 8-character code. */
+export function normalizeInviteCode(raw: string): string | null {
+  const c = raw.toUpperCase().replace(/[\s-]+/g, "");
+  return new RegExp(`^[${INVITE_CODE_ALPHABET}]{8}$`).test(c) ? c : null;
+}
+
+/** "ABCDEFGH" -> "ABCD-EFGH" (display and typing only). */
+export function formatInviteCode(raw: string): string {
+  const c = raw.toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 8);
+  return c.length > 4 ? `${c.slice(0, 4)}-${c.slice(4)}` : c;
+}
