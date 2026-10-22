@@ -5,8 +5,7 @@ import { ArrowDownWideNarrow } from "lucide-react";
 import { AdminLayout } from "@/components/AdminLayout";
 import { Card, Badge, Tabs, TrendChart, AxisLabels, Legend, changeTone } from "@/components/kit";
 import { QueryState } from "@/components/QueryState";
-import { UNIT_PAGE_SIZE, axisLabels, fetchSeries, fetchUnitEnergy, fmtKwh, fmtPct, peso, type Period, type UnitSort } from "@/lib/consumption";
-import { getTariff } from "@/lib/tariff";
+import { UNIT_PAGE_SIZE, axisLabels, fallbackNote, fallbackRateQuery, fetchSeries, fetchUnitEnergy, fmtKwh, fmtPct, peso, type Period, type UnitSort } from "@/lib/consumption";
 
 export const Route = createFileRoute("/consumption-analytics/")({
   head: () => ({
@@ -34,6 +33,7 @@ function Analytics() {
     placeholderData: keepPreviousData,
   });
 
+  const fb = useQuery(fallbackRateQuery);
   const pts = series.data?.points ?? [];
   const bucket = series.data?.bucket ?? "day";
   const total = units.data?.total ?? 0;
@@ -107,7 +107,7 @@ function Analytics() {
                   </table>
                 </div>
               </Card>
-              <p className="mt-3 text-xs text-subtle">Cost uses each unit's own rate when set, otherwise ₱{getTariff().rate.toFixed(2)}/kWh (estimate).</p>
+              <p className="mt-3 text-xs text-subtle">Cost uses each unit's own rate when set. Units without one use {fallbackNote(fb.data)}.</p>
               <div className="mt-4 flex flex-col items-start justify-between gap-3 sm:flex-row sm:items-center">
                 <p className="text-sm text-subtle">Showing {from}–{to} of {d.total.toLocaleString()} registered units</p>
                 <div className="flex items-center gap-1.5">

@@ -40,6 +40,23 @@ export function axisLabels(series: SeriesPoint[], b: Bucket): string[] {
   return [...new Set(idx)].map((i) => fmtBucket(series[i]!.bucket, b));
 }
 
+/* ---------- Fallback rate (average of the rates units have set) ---------- */
+export type FallbackRate = { rate: number; source: "average" | "default"; unitsWithRate: number };
+
+export async function fetchFallbackRate(): Promise<FallbackRate> {
+  const rows = await rpc<{ rate: number | string; source: string; units_with_rate: number }[]>("admin_fallback_rate", { p_default_rate: getTariff().rate });
+  const r = rows?.[0];
+  return r
+    ? { rate: Number(r.rate), source: r.source === "average" ? "average" : "default", unitsWithRate: r.units_with_rate }
+    : { rate: getTariff().rate, source: "default", unitsWithRate: 0 };
+}
+/** Shared query options: the rate changes rarely, so it is cached for 5 minutes. */
+export const fallbackRateQuery = { queryKey: ["fallback-rate"], queryFn: fetchFallbackRate, staleTime: 5 * 60_000 };
+export const fallbackShort = (f: FallbackRate | undefined) =>
+  f ? (f.source === "average" ? `avg ₱${f.rate.toFixed(2)} for others` : `₱${f.rate.toFixed(2)} default for others`) : "…";
+export const fallbackNote = (f: FallbackRate | undefined) =>
+  f ? (f.source === "average" ? `₱${f.rate.toFixed(2)}/kWh (average of the rates set by units)` : `₱${f.rate.toFixed(2)}/kWh (default estimate, no unit has a rate yet)`) : "…";
+
 /* ---------- Dashboard ---------- */
 export type DashboardStats = {
   units: number; boxes: number; boxesOnline: number;

@@ -5,7 +5,7 @@ import { ChevronLeft } from "lucide-react";
 import { AdminLayout } from "@/components/AdminLayout";
 import { Card, Badge, Tabs, TrendChart, AxisLabels, Legend, StatCard, DetailRows, changeTone } from "@/components/kit";
 import { QueryState } from "@/components/QueryState";
-import { axisLabels, fetchSeries, fetchUnitEnergy, fetchUnitInfo, fmtBucket, fmtKwh, fmtPct, fmtPower, fmtStamp, periodRange, peso, type Period } from "@/lib/consumption";
+import { axisLabels, fallbackNote, fallbackRateQuery, fetchSeries, fetchUnitEnergy, fetchUnitInfo, fmtBucket, fmtKwh, fmtPct, fmtPower, fmtStamp, periodRange, peso, type Period } from "@/lib/consumption";
 import { getTariff } from "@/lib/tariff";
 import { fmtDate } from "@/lib/users";
 
@@ -29,14 +29,15 @@ function UnitDetail() {
 
   const info = useQuery({ queryKey: ["unit-info", code], queryFn: () => fetchUnitInfo(code) });
   const energy = useQuery({ queryKey: ["unit-energy-one", code, period], queryFn: async () => (await fetchUnitEnergy(period, "code", false, 0, code)).rows[0] ?? null, placeholderData: keepPreviousData });
+  const fb = useQuery(fallbackRateQuery);
   const series = useQuery({ queryKey: ["energy-series", period, code], queryFn: () => fetchSeries(period, code), placeholderData: keepPreviousData });
 
   if (info.isSuccess && info.data === null) throw notFound();
 
   const u = info.data;
   const e = energy.data;
-  const rate = u?.rate ?? getTariff().rate;
-  const rateNote = u?.rate != null ? `At ₱${rate.toFixed(2)} per kWh (unit rate)` : `At ₱${rate.toFixed(2)} per kWh (default estimate)`;
+  const rate = u?.rate ?? fb.data?.rate ?? getTariff().rate;
+  const rateNote = u?.rate != null ? `At ₱${rate.toFixed(2)} per kWh (unit rate)` : `At ₱${rate.toFixed(2)} per kWh (${fb.data?.source === "average" ? "average of unit rates" : "default estimate"})`;
   const days = periodRange(period).days;
   const label = period === "Week" ? "week" : period === "Month" ? "month" : "year";
   const bucket = series.data?.bucket ?? "day";
@@ -94,7 +95,7 @@ function UnitDetail() {
                 ["Linked to", i.linked.length ? i.linked.map((l) => `${l.name}${l.memberRole ? ` (${l.memberRole})` : ""}`).join(", ") : "—"],
                 ["Devices online", `${i.boxesOnline} of ${i.boxCount}`],
                 ["Last reading", fmtStamp(i.lastReadingAt)],
-                ["Tariff rate", i.rate != null ? `₱${i.rate.toFixed(2)} / kWh` : `₱${getTariff().rate.toFixed(2)} / kWh (default estimate)`],
+                ["Tariff rate", i.rate != null ? `₱${i.rate.toFixed(2)} / kWh` : `Not set. Estimate uses ${fallbackNote(fb.data)}`],
                 ["Registered", fmtDate(i.createdAt)],
               ]}
             />
