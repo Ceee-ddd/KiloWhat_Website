@@ -1,9 +1,13 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
+import { useQuery } from "@tanstack/react-query";
 import { Users, Activity, TriangleAlert, Home } from "lucide-react";
 import { AdminLayout } from "@/components/AdminLayout";
 import { Card, Badge, TrendChart, AxisLabels, Legend, type Tone } from "@/components/kit";
-import { systemTrend, activityLog } from "@/lib/data";
+import { activityLog } from "@/lib/data";
 import { useStore } from "@/lib/store";
+import { fetchUserCounts } from "@/lib/users";
+import { fetchDashboardStats, fetchSeries, axisLabels, fmtKwh, peso, fallbackRateQuery, fallbackShort } from "@/lib/consumption";
+import { POLL_MS } from "@/lib/queries";
 
 export const Route = createFileRoute("/")({
   head: () => ({
@@ -39,13 +43,21 @@ function Stat({ label, icon: Icon, value, sub, extra }: { label: string; icon: t
 
 function Dashboard() {
   const anomalies = useStore((s) => s.anomalies);
+  const counts = useQuery({ queryKey: ["user-counts"], queryFn: fetchUserCounts });
+  const c = counts.data;
+  // Device and energy totals refresh once a minute, and only while this tab is visible.
+  const stats = useQuery({ queryKey: ["dashboard-stats"], queryFn: fetchDashboardStats, refetchInterval: POLL_MS * 2, refetchIntervalInBackground: false });
+  const trend = useQuery({ queryKey: ["energy-series", "Month", null], queryFn: () => fetchSeries("Month", null) });
+  const fb = useQuery(fallbackRateQuery);
+  const st = stats.data;
+  const pts = trend.data?.points ?? [];
   return (
     <AdminLayout title="Dashboard Overview">
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 2xl:grid-cols-4 2xl:gap-6">
-        <Stat label="Total Users" icon={Users} value="1,247" sub="18 Landlords · 1,024 Tenants · 205 Indiv." />
-        <Stat label="Consumption this month" icon={Activity} value="42,850 kWh" sub="Approx. ₱364,225 total cost" />
+        <Stat label="Total Users" icon={Users} value={c ? c.total.toLocaleString() : "—"} sub={c ? `${c.landlord} Landlords · ${c.tenant} Tenants · ${c.individual} Indiv.` : counts.isError ? "Could not load" : "Loading…"} />
+        <Stat label="Consumption this month" icon={Activity} value={st ? `${fmtKwh(st.kwhMonth)} kWh` : "—"} sub={st ? `Est. cost ${peso(st.costMonth)} (unit rates; ${fallbackShort(fb.data)})` : stats.isError ? "Could not load" : "Loading…"} />
         <Stat label="Active Anomalies" icon={TriangleAlert} value={String(anomalies.filter((a) => a.status === "Open").length)} extra={<Badge tone="danger">Critical</Badge>} sub="Overload & leak patterns flagged" />
-        <Stat label="Registered Units" icon={Home} value="912" sub="98.5% reporting data online" />
+        <Stat label="Registered Units" icon={Home} value={st ? st.units.toLocaleString() : "—"} sub={st ? `${st.boxesOnline} of ${st.boxes} boxes online` : stats.isError ? "Could not load" : "Loading…"} />
       </div>
 
       <Card className="mt-6 p-6">
@@ -56,8 +68,10 @@ function Dashboard() {
           </div>
           <Legend items={[{ label: "Usage (kWh)" }]} />
         </div>
-        <div className="mt-4"><TrendChart data={systemTrend} height={210} /></div>
-        <AxisLabels labels={["30 days ago", "20 days ago", "10 days ago", "Today"]} />
+        <div className="mt-4"><TrendChart data={pts.map((x) => Math.round(x.kwh * 1000) / 1000)} height={210} /></div>
+        {trend.isError ? <p className="mt-3 text-xs text-subtle">Could not load the trend.</p> : trend.data && pts.every((x) => x.kwh === 0)
+          ? <p className="mt-3 text-xs text-subtle">No consumption recorded in the last 30 days.</p>
+          : <AxisLabels labels={axisLabels(pts, "day")} />}
       </Card>
 
       <div className="mt-6 grid grid-cols-1 gap-4 xl:grid-cols-2 xl:gap-6">
