@@ -2,9 +2,10 @@ import { createFileRoute } from "@tanstack/react-router";
 import { useState, type ReactNode } from "react";
 import { toast } from "sonner";
 import { AdminLayout } from "@/components/AdminLayout";
-import { Card, Badge, Tabs, Toggle, type Tone } from "@/components/kit";
+import { Card, Badge, Tabs, Toggle } from "@/components/kit";
 import { AddAdminDialog } from "@/components/AddAdminDialog";
 import { AdminActivityLog } from "@/components/AdminActivityLog";
+import { AnomalySettingsPanel } from "@/components/AnomalySettingsPanel";
 import { useSession } from "@/lib/auth";
 import { useQuery } from "@tanstack/react-query";
 import { listAdmins } from "@/lib/admins";
@@ -82,35 +83,7 @@ function SettingsPage() {
             </Section>
           </div>
         )}
-        {tab === "anomaly" && (
-          <div className="flex flex-col gap-12">
-            <Section title="Default detection thresholds" extra={<span className="rounded-full bg-brand-soft px-3.5 py-1 text-[10px] font-semibold text-brand-bright">live on 91 meters</span>}>
-              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:gap-x-14">
-                <div><Label>Threshold limit</Label><Num v={150} unit="kWh / day" /></div>
-                <div><Label>Unusual surge</Label><Num v={60} unit="% above avg" /></div>
-                <div><Label>Voltage sag floor</Label><Num v={200} unit="V" /></div>
-              </div>
-              <div className="mt-3">
-                <Row small title="Flag reverse energy" desc="Current flowing back into the grid — usually a wiring fault or a tampered meter." />
-                <Row small title="Flag zero usage on an occupied unit" desc="No consumption for 48 hours on a unit with an active tenant." />
-              </div>
-            </Section>
-            <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
-              <Section title="Severity">
-                {([["Critical", "danger", ["Overload, Cutoff", "Overload only"]], ["Warning", "warn", ["Voltage sag, Surge", "Surge only"]], ["Resolved", "brand", ["Auto after 7 days normal", "Manual only"]]] as [string, Tone, string[]][]).map(([l, t, o]) => (
-                  <div key={l} className="flex items-center justify-between border-t border-border py-3">
-                    <Badge tone={t}>{l}</Badge><Select options={o} />
-                  </div>
-                ))}
-              </Section>
-              <Section title="Handling">
-                <Row title="Notify the landlord" desc="The property owner see the flag in their app, not just the admin queue." />
-                <Row title="Group repeat flags" desc="The same anomaly on the same unit stays one entry instead of filling the queue." />
-                <div className="mt-10"><Label hint="hours">Escalate if unacknowledged after</Label><Num v={24} /></div>
-              </Section>
-            </div>
-          </div>
-        )}
+        {tab === "anomaly" && <AnomalySettingsPanel />}
         {tab === "submeters" && (
           <div className="flex flex-col gap-12">
             <Section title="Reporting">
